@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ping Pong Volcano Simulation</title>
+<style>
+  body { background: #111; color: white; text-align: center; font-family: sans-serif; }
+  canvas { background: #222; display: block; margin: auto; }
+  .controls { margin: 10px; }
+  button, input { margin: 5px; }
+</style>
+</head>
+<body>
+
+<h2>🌋 Ping Pong Balls into a Volcano 🚁</h2>
+
+<canvas id="canvas" width="900" height="600"></canvas>
+
+<div class="controls">
+  <button onclick="dropBalls()">Drop Balls</button>
+  <label>Wind:
+    <input type="range" min="-3" max="3" step="0.1" value="1" id="windSlider">
+  </label>
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const gravity = 0.25;
+const airDensity = 0.02;
+const ballRadius = 5;
+
+let windBase = 1;
+let turbulence = 0.5;
+
+let helicopter = { x: 450, y: 80, dir: 1 };
+let balls = [];
+let lavaSplashes = [];
+
+function dropBalls() {
+  for (let i = 0; i < 80; i++) {
+    balls.push({
+      x: helicopter.x + Math.random()*20 - 10,
+      y: helicopter.y,
+      vx: Math.random()*1 - 0.5,
+      vy: 0,
+      active: true
+    });
+  }
+}
+
+function drawVolcano() {
+  ctx.fillStyle = "#552200";
+  ctx.beginPath();
+  ctx.moveTo(200, 500);
+  ctx.lineTo(450, 200);
+  ctx.lineTo(700, 500);
+  ctx.closePath();
+  ctx.fill();
+
+  // crater
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.ellipse(450, 240, 40, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawHelicopter() {
+  ctx.fillStyle = "gray";
+  ctx.fillRect(helicopter.x - 20, helicopter.y - 5, 40, 10);
+  ctx.strokeStyle = "white";
+  ctx.beginPath();
+  ctx.moveTo(helicopter.x - 30, helicopter.y - 15);
+  ctx.lineTo(helicopter.x + 30, helicopter.y - 15);
+  ctx.stroke();
+}
+
+function updateHelicopter() {
+  helicopter.x += helicopter.dir * 1.2;
+  if (helicopter.x > 650 || helicopter.x < 250) helicopter.dir *= -1;
+}
+
+function spawnLavaSplash(x, y) {
+  for (let i = 0; i < 20; i++) {
+    lavaSplashes.push({
+      x, y,
+      vx: Math.random()*4 - 2,
+      vy: Math.random()*-4 - 2,
+      life: 60
+    });
+  }
+}
+
+function updateBalls() {
+  windBase = parseFloat(document.getElementById("windSlider").value);
+
+  balls.forEach(ball => {
+    if (!ball.active) return;
+
+    let wind = windBase + (Math.random() - 0.5) * turbulence;
+
+    // Drag force
+    let speed = Math.sqrt(ball.vx**2 + ball.vy**2);
+    let drag = airDensity * speed * speed;
+
+    ball.vx += wind * 0.05 - drag * ball.vx * 0.01;
+    ball.vy += gravity - drag * ball.vy * 0.01;
+
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // Volcano collision
+    if (ball.y > 230 && ball.y < 260 && Math.abs(ball.x - 450) < 40) {
+      ball.active = false;
+      spawnLavaSplash(ball.x, ball.y);
+    }
+  });
+}
+
+function updateLava() {
+  lavaSplashes.forEach(s => {
+    s.vy += gravity * 0.4;
+    s.x += s.vx;
+    s.y += s.vy;
+    s.life--;
+  });
+  lavaSplashes = lavaSplashes.filter(s => s.life > 0);
+}
+
+function drawBalls() {
+  ctx.fillStyle = "white";
+  balls.forEach(b => {
+    if (!b.active) return;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, ballRadius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawLava() {
+  ctx.fillStyle = "orange";
+  lavaSplashes.forEach(s => {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawVolcano();
+  updateHelicopter();
+  drawHelicopter();
+
+  updateBalls();
+  updateLava();
+
+  drawBalls();
+  drawLava();
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
