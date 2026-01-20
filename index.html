@@ -2,168 +2,178 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ping Pong Volcano Simulation</title>
+<title>3D Ping Pong Volcano</title>
 <style>
-  body { background: #111; color: white; text-align: center; font-family: sans-serif; }
-  canvas { background: #222; display: block; margin: auto; }
-  .controls { margin: 10px; }
-  button, input { margin: 5px; }
+  body { margin: 0; overflow: hidden; background: black; }
+  #ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: white;
+    font-family: sans-serif;
+    z-index: 10;
+  }
+  button { font-size: 16px; margin: 5px; }
 </style>
 </head>
 <body>
 
-<h2>🌋 Ping Pong Balls into a Volcano 🚁</h2>
-
-<canvas id="canvas" width="900" height="600"></canvas>
-
-<div class="controls">
-  <button onclick="dropBalls()">Drop Balls</button>
-  <label>Wind:
-    <input type="range" min="-3" max="3" step="0.1" value="1" id="windSlider">
-  </label>
+<div id="ui">
+  <button id="drop">Drop Balls</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
 <script>
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+// ----------------------
+// SCENE SETUP
+// ----------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111111);
 
-const gravity = 0.25;
-const airDensity = 0.02;
-const ballRadius = 5;
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth/window.innerHeight, 0.1, 1000
+);
+camera.position.set(0, 20, 40);
 
-let windBase = 1;
-let turbulence = 0.5;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-let helicopter = { x: 450, y: 80, dir: 1 };
-let balls = [];
-let lavaSplashes = [];
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1);
+sun.position.set(20, 50, 10);
+scene.add(sun);
+
+// ----------------------
+// REAL PHYSICS CONSTANTS
+// ----------------------
+const g = -9.81;
+const rho = 1.225;           // air density
+const Cd = 0.47;             // sphere drag coefficient
+const radius = 0.02;         // 40mm ping pong ball
+const area = Math.PI * radius * radius;
+const mass = 0.0027;
+
+// ----------------------
+// HELICOPTER
+// ----------------------
+const heli = new THREE.Mesh(
+  new THREE.BoxGeometry(2, 0.5, 1),
+  new THREE.MeshStandardMaterial({ color: 0x888888 })
+);
+heli.position.set(0, 25, 0);
+scene.add(heli);
+
+let heliDir = 1;
+
+// ----------------------
+// VOLCANO
+// ----------------------
+const volcano = new THREE.Mesh(
+  new THREE.ConeGeometry(15, 20, 32),
+  new THREE.MeshStandardMaterial({ color: 0x552200 })
+);
+volcano.position.y = 0;
+scene.add(volcano);
+
+// ----------------------
+// LAVA
+// ----------------------
+let lavaLevel = 1;
+const lavaMat = new THREE.MeshStandardMaterial({
+  color: 0xff3300,
+  emissive: 0xff2200
+});
+const lava = new THREE.Mesh(
+  new THREE.CylinderGeometry(4, 4, 1, 32),
+  lavaMat
+);
+lava.position.y = lavaLevel;
+scene.add(lava);
+
+// Lava sound
+const lavaSound = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_16a43c1b63.mp3");
+lavaSound.loop = true;
+lavaSound.volume = 0.3;
+lavaSound.play();
+
+// ----------------------
+// BALLS
+// ----------------------
+const balls = [];
+const ballGeo = new THREE.SphereGeometry(radius, 16, 16);
 
 function dropBalls() {
-  for (let i = 0; i < 80; i++) {
-    balls.push({
-      x: helicopter.x + Math.random()*20 - 10,
-      y: helicopter.y,
-      vx: Math.random()*1 - 0.5,
-      vy: 0,
-      active: true
-    });
+  for (let i = 0; i < 30; i++) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const ball = new THREE.Mesh(ballGeo, mat);
+    ball.position.copy(heli.position);
+    ball.velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 1,
+      0,
+      (Math.random() - 0.5) * 1
+    );
+    ball.temperature = 20;
+    scene.add(ball);
+    balls.push(ball);
   }
 }
 
-function drawVolcano() {
-  ctx.fillStyle = "#552200";
-  ctx.beginPath();
-  ctx.moveTo(200, 500);
-  ctx.lineTo(450, 200);
-  ctx.lineTo(700, 500);
-  ctx.closePath();
-  ctx.fill();
+document.getElementById("drop").onclick = dropBalls;
 
-  // crater
-  ctx.fillStyle = "black";
-  ctx.beginPath();
-  ctx.ellipse(450, 240, 40, 15, 0, 0, Math.PI * 2);
-  ctx.fill();
-}
+// Touch support
+document.body.addEventListener("touchstart", dropBalls);
 
-function drawHelicopter() {
-  ctx.fillStyle = "gray";
-  ctx.fillRect(helicopter.x - 20, helicopter.y - 5, 40, 10);
-  ctx.strokeStyle = "white";
-  ctx.beginPath();
-  ctx.moveTo(helicopter.x - 30, helicopter.y - 15);
-  ctx.lineTo(helicopter.x + 30, helicopter.y - 15);
-  ctx.stroke();
-}
-
-function updateHelicopter() {
-  helicopter.x += helicopter.dir * 1.2;
-  if (helicopter.x > 650 || helicopter.x < 250) helicopter.dir *= -1;
-}
-
-function spawnLavaSplash(x, y) {
-  for (let i = 0; i < 20; i++) {
-    lavaSplashes.push({
-      x, y,
-      vx: Math.random()*4 - 2,
-      vy: Math.random()*-4 - 2,
-      life: 60
-    });
-  }
-}
-
-function updateBalls() {
-  windBase = parseFloat(document.getElementById("windSlider").value);
-
-  balls.forEach(ball => {
-    if (!ball.active) return;
-
-    let wind = windBase + (Math.random() - 0.5) * turbulence;
-
-    // Drag force
-    let speed = Math.sqrt(ball.vx**2 + ball.vy**2);
-    let drag = airDensity * speed * speed;
-
-    ball.vx += wind * 0.05 - drag * ball.vx * 0.01;
-    ball.vy += gravity - drag * ball.vy * 0.01;
-
-    ball.x += ball.vx;
-    ball.y += ball.vy;
-
-    // Volcano collision
-    if (ball.y > 230 && ball.y < 260 && Math.abs(ball.x - 450) < 40) {
-      ball.active = false;
-      spawnLavaSplash(ball.x, ball.y);
-    }
-  });
-}
-
-function updateLava() {
-  lavaSplashes.forEach(s => {
-    s.vy += gravity * 0.4;
-    s.x += s.vx;
-    s.y += s.vy;
-    s.life--;
-  });
-  lavaSplashes = lavaSplashes.filter(s => s.life > 0);
-}
-
-function drawBalls() {
-  ctx.fillStyle = "white";
-  balls.forEach(b => {
-    if (!b.active) return;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, ballRadius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
-
-function drawLava() {
-  ctx.fillStyle = "orange";
-  lavaSplashes.forEach(s => {
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
+// ----------------------
+// ANIMATION LOOP
+// ----------------------
+const clock = new THREE.Clock();
 
 function animate() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  drawVolcano();
-  updateHelicopter();
-  drawHelicopter();
-
-  updateBalls();
-  updateLava();
-
-  drawBalls();
-  drawLava();
-
   requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  // Helicopter motion
+  heli.position.x += heliDir * dt * 5;
+  if (heli.position.x > 10 || heli.position.x < -10) heliDir *= -1;
+
+  // Lava rising
+  lavaLevel += dt * 0.2;
+  lava.scale.y = lavaLevel;
+  lava.position.y = lavaLevel / 2;
+
+  // Update balls
+  balls.forEach(ball => {
+    const v = ball.velocity.length();
+    const dragMag = 0.5 * rho * Cd * area * v * v;
+    const drag = ball.velocity.clone().normalize().multiplyScalar(-dragMag);
+
+    ball.velocity.y += g * dt;
+    ball.velocity.add(drag.multiplyScalar(dt / mass));
+
+    ball.position.add(ball.velocity.clone().multiplyScalar(dt));
+
+    // Heating near lava
+    if (ball.position.y < lavaLevel + 2) {
+      ball.temperature += dt * 300;
+      ball.material.color.lerp(new THREE.Color(0xff0000), 0.05);
+      ball.scale.multiplyScalar(0.995); // melting
+    }
+  });
+
+  renderer.render(scene, camera);
 }
 
 animate();
+
+// Resize
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 
 </body>
